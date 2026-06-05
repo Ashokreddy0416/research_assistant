@@ -6,14 +6,19 @@ import os
 from datetime import datetime
 from typing import List, Dict
 
-# Create reports/ folder if it doesn't exist yet
-# exist_ok=True means don't crash if folder already exists
-os.makedirs("reports", exist_ok=True)
+
+# Try to create reports folder.
+# Render's free tier filesystem can be restricted — fall back gracefully.
+try:
+    os.makedirs("reports", exist_ok=True)
+    CAN_SAVE = True
+except Exception:
+    CAN_SAVE = False
 
 
 def format_report(topic: str,
-                   content: str,
-                   citations: List[Dict] = []) -> str:
+                  content: str,
+                  citations: List[Dict] = []) -> str:
     """
     Build a complete markdown report and save it to reports/ folder.
 
@@ -29,7 +34,7 @@ def format_report(topic: str,
     header = f"""# Research Report: {topic}
 
 **Generated:** {timestamp}
-**Model:** Llama 3.1 70B via Groq (free tier)
+**Model:** Llama 3.3 70B via Groq (free tier)
 
 ---
 
@@ -47,20 +52,29 @@ def format_report(topic: str,
     # Combine all parts
     full_report = header + content + citation_block
 
-    # Build a safe filename from the topic
-    # e.g. "AI in Healthcare" → "ai_in_healthcare_20250605_143022.md"
-    safe_name = "_".join(topic.lower().split())[:40]
-    ts_str    = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filepath  = f"reports/{safe_name}_{ts_str}.md"
+    # Try to save to disk — silently skip if filesystem is read-only
+    # (e.g. running on Render free tier)
+    if CAN_SAVE:
+        try:
+            # Build a safe filename from the topic
+            # e.g. "AI in Healthcare" → "ai_in_healthcare_20250605_143022.md"
+            safe_name = "_".join(topic.lower().split())[:40]
+            ts_str    = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath  = f"reports/{safe_name}_{ts_str}.md"
 
-    # Save to disk
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(full_report)
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(full_report)
 
-    print(f"✓ Report saved: {filepath}")
+            print(f"✓ Report saved: {filepath}")
+        except Exception as e:
+            # Don't crash if we can't save — just log it
+            print(f"(could not save file: {e})")
+
     return full_report
 
 
 def list_reports() -> List[str]:
     """Return list of all saved report filenames, newest first."""
+    if not CAN_SAVE or not os.path.exists("reports"):
+        return []
     return sorted(os.listdir("reports"), reverse=True)
