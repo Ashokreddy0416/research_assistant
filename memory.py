@@ -1,96 +1,62 @@
-# memory.py
-# PURPOSE: Store and retrieve research content using vector similarity
-# USED BY: agent.py calls remember() to store, recall() to retrieve
-
-import chromadb    # local vector database
-import hashlib     # creates unique IDs for text chunks
-from sentence_transformers import SentenceTransformer  # text → vectors
+# memory.py — lazy loaded for Render free tier
+import chromadb
+import hashlib
 from typing import List, Dict
 
-# Load embedding model (runs locally, no API needed)
-# all-MiniLM-L6-v2 is small (~80MB) but very good for semantic search
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+_embedder = None
+_client = None
+_collection = None
 
-# PersistentClient = saves to disk (survives restarts)
-# path = where to save the database files
-client = chromadb.PersistentClient(path="./chroma_db")
-
-# A collection = like a table in a database
-# cosine = similarity metric (best for text)
-collection = client.get_or_create_collection(
-    name="research_memory",
-    metadata={"hnsw:space": "cosine"}
-)
+def _init():
+    """Lazy-load heavy deps only when first used."""
+    global _embedder, _client, _collection
+    if _embedder is None:
+        from sentence_transformers import SentenceTransformer
+        _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        _client = chromadb.PersistentClient(path="./chroma_db")
+        _collection = _client.get_or_create_collection(
+            name="research_memory",
+            metadata={"hnsw:space": "cosine"}
+        )
+    return _embedder, _collection
 
 def chunk_text(text: str, chunk_size: int = 500) -> List[str]:
-    """
-    Split long text into overlapping chunks.
-    WHY: Vector models work best on short pieces (500 words max).
-    Overlapping (step=400) means no information is cut off at chunk edges.
-    """
-    words = text.split()                     # split into individual words
+    words = text.split()
     chunks = []
-    for i in range(0, len(words), 400):     # step 400, overlap 100 words
+    for i in range(0, len(words), 400):
         chunk = " ".join(words[i:i + chunk_size])
-        if chunk:                            # don't add empty chunks
+        if chunk:
             chunks.append(chunk)
     return chunks
 
 def remember(text: str, metadata: Dict = {}):
-    """
-    Store text in memory.
-    1. Split into chunks
-    2. Convert each chunk to a vector (embedding)
-    3. Store vector + original text in ChromaDB
-    """
+    embedder, collection = _init()
     chunks = chunk_text(text)
     if not chunks:
-        return                               # nothing to store
-
-    # encode() converts list of strings into list of vectors
+        return
     embeddings = embedder.encode(chunks).tolist()
-
-    # create unique ID for each chunk using MD5 hash
-    ids = [
-        hashlib.md5(f"{c}{i}".encode()).hexdigest()
-        for i, c in enumerate(chunks)
-    ]
-
-    # only pass metadatas if metadata dict is non-empty
-    # ChromaDB rejects empty {} metadata
-    add_kwargs = {
-        "embeddings": embeddings,
-        "documents": chunks,
-        "ids": ids,
-    }
-    if metadata:
-        add_kwargs["metadatas"] = [metadata] * len(chunks)
-
+    ids = [hashlib.md5(f"{c}{i}".encode()).hexdigest()
+           for i, c in enumerate(chunks)]
     try:
-        collection.add(**add_kwargs)
-    except Exception as e:
-        print(f"remember() failed: {e}")
+        collection.add(embeddings=embeddings, documents=chunks,
+                       ids=ids, metadatas=[metadata] * len(chunks))
+    except Exception:
+        pass
 
 def recall(query: str, n: int = 6) -> List[str]:
-    """
-    Retrieve most relevant stored chunks for a query.
-    ChromaDB finds chunks whose meaning is closest to the query.
-    """
+    embedder, collection = _init()
     if collection.count() == 0:
-        return []                            # nothing stored yet
-
-    emb = embedder.encode([query]).tolist()  # convert query to vector
-    results = collection.query(
-        query_embeddings=emb,
-        n_results=min(n, collection.count()) # don't ask for more than exists
-    )
-    return results["documents"][0]          # return list of text chunks
+        return []
+    emb = embedder.encode([query]).tolist()
+    results = collection.query(query_embeddings=emb,
+                               n_results=min(n, collection.count()))
+    return results["documents"][0]
 
 def clear_memory():
-    """Wipe all stored memory. Call this before each new research topic."""
-    global collection
-    client.delete_collection("research_memory")
-    collection = client.get_or_create_collection(
+    global _collection
+    _init()
+    _client.delete_collection("research_memory")
+    _collection = _client.get_or_create_collection(
         name="research_memory",
         metadata={"hnsw:space": "cosine"}
     )
