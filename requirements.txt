@@ -1,0 +1,14 @@
+groq
+langchain-groq
+langchain-core
+langgraph
+duckduckgo-search
+beautifulsoup4
+requests
+chromadb
+sentence-transformers
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+ddgs
