@@ -2,8 +2,8 @@
 # PURPOSE: Entry point — run this file to use the research agent
 # USAGE:   uv run python main.py
 
-from agent import agent        # our compiled LangGraph agent
-from memory import clear_memory # wipe memory before new topic
+from agent import agent          # our compiled LangGraph agent
+from memory import clear_memory  # wipe memory before new topic
 
 
 def run_research(topic: str) -> str:
@@ -44,3 +44,25 @@ def run_research(topic: str) -> str:
 
     # Extract the report from final state
     report = final_state["report"]
+
+    # Show a preview (first 500 characters)
+    print(f"\n{'='*55}")
+    print("✅ DONE! Report preview:")
+    print(f"{'='*55}")
+    print(report[:500])
+    print("...\n(Full report saved in reports/ folder)")
+
+    return report
+
+
+# This block ONLY runs when you do: uv run python main.py
+# It does NOT run when other files do: from main import run_research
+if __name__ == "__main__":
+    # Ask user for topic — strip() removes accidental spaces
+    topic = input("Enter research topic: ").strip()
+
+    # Use a default if user just presses Enter
+    if not topic:
+        topic = "Impact of AI on software developer jobs in India 2025"
+
+    run_research(topic)

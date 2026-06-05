@@ -4,7 +4,7 @@
 
 import requests                       # fetches web pages
 from bs4 import BeautifulSoup         # parses HTML → clean text
-from ddgs import DDGS                 # free web search, no API key (renamed from duckduckgo_search)
+from duckduckgo_search import DDGS    # free web search, no API key
 from langchain_core.tools import tool # @tool decorator
 
 # Browser-like headers so websites don't block our scraper
@@ -30,7 +30,7 @@ def web_search(query: str, max_results: int = 6) -> str:
 
         # Format results as readable text for the LLM
         formatted = []
-        for i, r in enumerate(results, 1):    # enumerate starts at 1
+        for i, r in enumerate(results, 1):     # enumerate starts at 1
             formatted.append(
                 f"[{i}] {r['title']}\nURL: {r['href']}\n{r['body']}\n"
             )
@@ -57,7 +57,7 @@ def scrape_page(url: str, max_chars: int = 4000) -> str:
 
         # remove noise: scripts, styles, nav bars, footers
         for tag in soup(["script", "style",
-                          "nav", "footer", "header"]):
+                         "nav", "footer", "header"]):
             tag.decompose()                    # remove tag from tree
 
         # find main content area (try main → article → body)
